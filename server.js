@@ -274,6 +274,37 @@ app.post('/execute', async (req, res) => {
     }
 });
 
+// app.get('/visualize', async (req, res) => {
+//     const dotFile = join(cppDir, 'parse_tree.dot');
+//     const pngFile = join(cppDir, 'parse_tree.png');
+
+//     if (!existsSync(dotFile)) {
+//         return res.status(500).json({ error: 'Parse tree file (parse_tree.dot) not found.' });
+//     }
+
+//     try {
+//         const dotProcess = spawn('dot', ['-Tpng', dotFile, '-o', pngFile], { cwd: cppDir });
+
+//         dotProcess.on('error', (error) => {
+//             res.status(500).json({ error: `Failed to run dot command: ${error.message}` });
+//         });
+
+//         dotProcess.on('close', (code) => {
+//             if (code === 0) {
+//                 if (existsSync(pngFile)) {
+//                     res.sendFile(pngFile);
+//                 } else {
+//                     res.status(500).json({ error: 'Parse tree image (parse_tree.png) not generated.' });
+//                 }
+//             } else {
+//                 res.status(500).json({ error: `dot command failed with code ${code}` });
+//             }
+//         });
+//     } catch (error) {
+//         res.status(500).json({ error: `Error generating parse tree: ${error.message}` });
+//     }
+// });  ------ commented for deployment
+
 app.get('/visualize', async (req, res) => {
     const dotFile = join(cppDir, 'parse_tree.dot');
     const pngFile = join(cppDir, 'parse_tree.png');
@@ -285,25 +316,37 @@ app.get('/visualize', async (req, res) => {
     try {
         const dotProcess = spawn('dot', ['-Tpng', dotFile, '-o', pngFile], { cwd: cppDir });
 
+        let responded = false;  // flag to prevent duplicate sends
+
         dotProcess.on('error', (error) => {
-            res.status(500).json({ error: `Failed to run dot command: ${error.message}` });
+            if (!responded) {
+                responded = true;
+                res.status(500).json({ error: `Failed to run dot command: ${error.message}` });
+            }
         });
 
         dotProcess.on('close', (code) => {
-            if (code === 0) {
-                if (existsSync(pngFile)) {
-                    res.sendFile(pngFile);
-                } else {
-                    res.status(500).json({ error: 'Parse tree image (parse_tree.png) not generated.' });
-                }
+            if (responded) return;
+            responded = true;
+
+            if (code === 0 && existsSync(pngFile)) {
+                res.sendFile(pngFile);
             } else {
-                res.status(500).json({ error: `dot command failed with code ${code}` });
+                res.status(500).json({
+                    error: code !== 0
+                        ? `dot command failed with code ${code}`
+                        : 'Parse tree image (parse_tree.png) not generated.'
+                });
             }
         });
     } catch (error) {
-        res.status(500).json({ error: `Error generating parse tree: ${error.message}` });
+        return res.status(500).json({ error: `Error generating parse tree: ${error.message}` });
     }
 });
+
+
+
+
 
 app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
